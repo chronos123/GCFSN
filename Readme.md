@@ -2,14 +2,16 @@
 
 paper link: https://www.sciencedirect.com/science/article/pii/S266620272400168X
 
-### Enviromnet
+### Environment
 python=3.8.8
 
 ```py
+conda create -n GCFSN python=3.8.8
+
 pip install -r requirements.txt
 ```
 
-### Example data
+### Datasets
 
 The data file dataGNN4.mat is available at https://pan.baidu.com/s/1tUXbUczqjI8Ih8NrunqZpA?pwd=nf7t 提取码: nf7t.
 
