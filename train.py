@@ -20,9 +20,18 @@ from design_utils import create_new_mesh_list_1, create_new_mesh_list_heat
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch import randperm
 import warnings
+import argparse
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--data-path",
+        type=str,
+        required=True,
+        help="path to the dataset",
+    )
+    
     torch.manual_seed(0)
     cuda = torch.cuda.is_available()
     device = torch.device('cuda') if cuda else torch.device('cpu')
@@ -32,8 +41,8 @@ if __name__ == '__main__':
     
     _lambda = 10
     
-    file_args = {'file_path' : 'datasets/heat/dataGNN.mat'}
-    file_args1 = {'file_path' : 'datasets/heat/dataGNN.mat'}
+    file_args = {'file_path' : args.data_path}
+    file_args1 = {'file_path' : args.data_path}
     #
     node_train = 16 
     total_epoch = 3000
