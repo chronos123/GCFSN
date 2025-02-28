@@ -1,7 +1,6 @@
 ## Pytorch implement for Coupled multiphysics solver for irregular regions based on graph neural network
 
-https://www.sciencedirect.com/science/article/pii/S266620272400168X
-
+paper link: https://www.sciencedirect.com/science/article/pii/S266620272400168X
 
 ### Enviromnet
 python=3.8.8
