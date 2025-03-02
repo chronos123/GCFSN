@@ -1,1 +1,9 @@
 dataset/dataGNN4.mat
+.vscode
+test/
+__pycache__
+
+runs
+exp*
+heat_models
+preds_exp4

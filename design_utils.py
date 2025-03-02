@@ -40,7 +40,7 @@ def create_new_mesh_list_heat(num_datasets, sqrt_num_nodes_list=[3],
     elif exp == "6":
         graph = GraphLessMsgStep(data_idx=-1).train_heat_graph_6(device=device)
     else:
-        raise NotImplementedError()
+        raise NotImplementedError(f"exp is '{exp}', which is not supported")
     
     num_nodes_p = graph.num_nodes
     print(f'nodes num is: {num_nodes_p}')

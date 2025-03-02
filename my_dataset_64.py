@@ -54,9 +54,6 @@ class PoissonSquareRoomOutDataset(Dataset):
 
     def __getitem__(self, idx):
         """
-        返回坐标和电势, out[0]为[x,y], out[1] 为 [result]
-        坐标: room_size * points * 2
-        电势: room_size * points * value
         """
         if type(idx) is not int:
             idx = idx.item()
@@ -174,9 +171,6 @@ class HeatOutDataset(Dataset):
 
     def __getitem__(self, idx):
         """
-        返回坐标和电势, out[0]为[x,y], out[1] 为温度, out[2] 为速度
-        坐标: room_size * points * 2
-        电势: room_size * points * value
         """
         if type(idx) is not int:
             idx = idx.item()
@@ -185,13 +179,15 @@ class HeatOutDataset(Dataset):
             raise StopIteration
         
         temperatures = self.datas['Tnorm'][idx * self.room_size:(idx + 1) * self.room_size]
-        if self.file_path == "datasets/heat/dataGNN4.mat" or  self.file_path == "datasets/heat/dataGNN3.mat":
+        
+        # fix the processing error (normlization bias) of the matlab datafile 
+        if self.file_path == "dataset/dataGNN4.mat" or  self.file_path == "dataset/dataGNN3.mat":
             temperatures = temperatures + 0.2
         if self.file_path in [
-            "datasets/heat/dataGNN1.mat",
-            "datasets/heat/dataGNN2.mat",
-            "datasets/heat/dataGNN3.mat",
-            "datasets/heat/dataGNN4.mat"
+            "dataset/dataGNN1.mat",
+            "dataset/dataGNN2.mat",
+            "dataset/dataGNN3.mat",
+            "dataset/dataGNN4.mat"
         ]:
             velocities = self.datas['Vnorm'][idx * self.room_size:(idx + 1) * self.room_size] + 0.5
         else:
@@ -209,20 +205,3 @@ class HeatOutDataset(Dataset):
         coordinates = torch.cat((x_coordinates, y_coordinates), dim=2)
 
         return (coordinates, values)
-
-
-if __name__ == '__main__':
-    data = HeatInpDataset("datasets/heat/dataGNN.mat")
-    out = data[0]
-    pass
-    
-    # data_in = './datasets/data1/BOUNDARY'
-    # data_out = './datasets/data1/VDATA'
-
-    # o = PoissonSquareRoomOutDataset(data_out)
-    # o[0]
-    # pass
-
-
-
-

@@ -14,98 +14,116 @@ from poisson_square_experiments_utils import *
 from neural_processes import NeuralProcesses
 from GEN import GEN
 from torch.utils import data
-from gen_softnn import GENSoftNN
+from gen_softnn import GENSoftNN, GENSoftNNVpred
 from utils import Net
 from design_utils import create_new_mesh_list_1, create_new_mesh_list_heat
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, CosineAnnealingWarmRestarts, CyclicLR, StepLR
 from torch import randperm
 import warnings
 import argparse
 
 
 if __name__ == '__main__':
+    # torch.manual_seed(0)
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--exp-name",
+        type=str,
+        required=True,
+        help="type of the graph given by the experiment number",
+    )
+
     parser.add_argument(
         "--data-path",
         type=str,
         required=True,
         help="path to the dataset",
     )
+
+    args = parser.parse_args()
     
-    torch.manual_seed(0)
     cuda = torch.cuda.is_available()
     device = torch.device('cuda') if cuda else torch.device('cpu')
     model_type = ['GENSoftNN', 'GENPlanarGrid', 'NP'][0]
+    
+    exp = args.exp_name
+        
+    print(f"exp is {exp}\n")
     bs = 8
     k = 32
     
-    _lambda = 10
-    
     file_args = {'file_path' : args.data_path}
     file_args1 = {'file_path' : args.data_path}
-    #
+
     node_train = 16 
-    total_epoch = 3000
+    total_epoch = 10000
 
     sqrt_num_nodes_list = [16]
+
+    # ratio = 5
 
     copies_per_graph = 1
     less_loss = float('inf')
     opt_nodes = False
-    slow_opt_nodes = False 
+    slow_opt_nodes = False # Train node_pos only in part of each "house" data;slower
     do_tensorboard = True
+    # Changed the random initialization because GeneralizedHalton
+    # doesn't install well on a Docker. We use another simple random initialization.
 
     if model_type == 'NP':
         opt_nodes = False
     if not opt_nodes: slow_opt_nodes = False
     full_dataset = FTDataset(inp_datasets=[HeatInpDataset],
-            inp_datasets_args = [file_args],    
+            inp_datasets_args = [file_args],    # DBR: new file direction
             out_datasets = [HeatOutDataset],
-            out_datasets_args = [file_args1],   
+            out_datasets_args = [file_args1],   # DBR: new file direction
             idx_list=None)
     
     train_size = int(0.8*len(full_dataset))
     test_size = len(full_dataset) - train_size
     train_dataset, test_dataset = data.random_split(full_dataset, [train_size, test_size], generator=torch.Generator().manual_seed(42))
     
-    train_loader = DataLoader(train_dataset, batch_size=1, num_workers=6,
+    train_loader = DataLoader(train_dataset, batch_size=1, num_workers=0,
             shuffle=True, drop_last=False)
-    test_loader = DataLoader(test_dataset,  batch_size=1, num_workers=6,
+    test_loader = DataLoader(test_dataset,  batch_size=1, num_workers=0,
             shuffle=True, drop_last=False)
 
     encoders = nn.ModuleList([Net(dims=[3, k, k, k])])
-    decoders = nn.ModuleList([Net(dims=[k+2, k, k, 2])])
+    decoders = nn.ModuleList([Net(dims=[k+2, k, k, 1])])
 
     loss_fn = nn.MSELoss()
-
+    # loss_fn = log_loss
     if model_type == 'NP':
         model = NeuralProcesses(encoders, decoders)
         mesh_list = mesh_params = [[None] for _ in range(len(full_dataset))]
     else:
         assert min(sqrt_num_nodes_list) >= 1
         if model_type == 'GENSoftNN':
-            model = GENSoftNN(encoders=encoders, decoders=decoders)
+            model = GENSoftNN(encoders=encoders, decoders=decoders, exp=exp)
         else: raise NotImplementedError
         mesh_list, mesh_params, num_nodes_list = create_new_mesh_list_heat(
                 num_datasets=len(full_dataset),
                 sqrt_num_nodes_list=sqrt_num_nodes_list,
                 initialization='random' if opt_nodes else 'uniform',
-                copies_per_graph=copies_per_graph, device=device, perturb=0.001)
+                copies_per_graph=copies_per_graph, device=device, perturb=0.001, exp=exp)
     max_mesh_list_elts = max([len(aux) for aux in mesh_list])
     if cuda: model.cuda()
     opt = torch.optim.Adam(params=model.parameters(), lr=3e-3)
     if model_type == 'NP':mesh_opt = None
-
+#    else: mesh_opt = torch.optim.Adam(params=mesh_params, lr=3e-4)
     mesh_opt = None
     time_now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     
     if do_tensorboard: writer = SummaryWriter(log_dir=f"runs/{time_now}")
-    else: writer = None
-
-    save_dir = f"heat_models/v{_lambda}/{time_now}"
-    if not isinstance(loss_fn, nn.MSELoss):
-        save_dir = f"relative_loss_heat_models/{time_now}"
+    else: writer = None 
+    
+    lr_scheduler = StepLR(opt, step_size=15000, gamma=0.9)
+    save_dir = f"exp_{exp}_transform_room_independent_model/{time_now}"
     os.makedirs(save_dir, exist_ok=True)
+    
+    # if exp == "2":
+    #     state_dict = torch.load(r"exp_4_transform_room_independent_model\2023-06-18_16-01-41\final_model.pkl")
+    #     model.load_state_dict(state_dict)
 
     for epoch in Tqdm(range(total_epoch)):
         train_loss = 0. ;  test_loss = 0.
@@ -140,7 +158,7 @@ if __name__ == '__main__':
                 train_graphs += 1
                 if model_type == 'NP': preds = model(Inp, Q)
                 else:
-                    preds = model(Inp, Q, G=G) 
+                    preds = model(Inp, Q, G=G) # 计算网络的预测值
                 if slow_opt_nodes:
                     exec_losses = [loss_fn(pred[node_train:],
                         target[node_train:]).unsqueeze(0)
@@ -155,11 +173,11 @@ if __name__ == '__main__':
                     mesh_opt.zero_grad()
                     finetune_loss.backward()
                     mesh_opt.step()
-                    
+                    # project back to square
                     graph_update_meshes_after_opt(mesh_list[idx][g_idx],
                             epoch=epoch, writer=writer)
                 else:
-                    losses = [loss_fn(pred, target * _lambda).unsqueeze(0)
+                    losses = [loss_fn(pred, target).unsqueeze(0)
                         for (pred, target) in zip(preds, targets)]
                     loss = torch.sum(torch.cat(losses))
                     loss.backward()
@@ -180,7 +198,8 @@ if __name__ == '__main__':
                 writer.add_scalar('train/loss-'+str(num),
                         train_loss_summ[num][0]/train_loss_summ[num][1],
                         epoch)
-
+            # print(f"\ntrain loss is {train_loss_summ}\ntrain_loss is {train_loss}\n")
+# test below
         for cnt, ((Inp,Out),idx) in enumerate(test_loader):
             if cuda:
                 for d in Out:
@@ -212,7 +231,7 @@ if __name__ == '__main__':
                     finetune_loss.backward()
                     loss = exec_loss
                 else:
-                    losses = [loss_fn(pred, target * _lambda).unsqueeze(0)
+                    losses = [loss_fn(pred, target).unsqueeze(0)
                         for (pred, target) in zip(preds, targets)]
                     loss = torch.sum(torch.cat(losses))
                 test_loss += loss.item()
@@ -221,8 +240,10 @@ if __name__ == '__main__':
                 test_loss_summ[num_nodes][0] += loss.item()
                 test_loss_summ[num_nodes][1] += 1
         
-
-        opt.zero_grad() 
+        # lr_scheduler.step(test_loss)
+        lr_scheduler.step()
+        print(f"lr is {lr_scheduler._last_lr}")
+        opt.zero_grad() #Don't train Theta on finetune test set when optmizing nodes
         if mesh_opt is not None:
             mesh_opt.step()
             mesh_opt.zero_grad()
@@ -242,12 +263,17 @@ if __name__ == '__main__':
             if train_loss < less_loss:
                 less_loss = train_loss
                 torch.save(model.state_dict(), f'{save_dir}/local_optium_model.pkl')
-
+                # for param_tensor in model.state_dict():
+                #     print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+                # print("save")
         else:
+            # print(round(train_loss/(max_mesh_list_elts * train_size), 3),
+            #     round(test_loss/(max_mesh_list_elts * test_size), 3))
             if train_loss < less_loss:
                 less_loss = train_loss
                 torch.save(model, f'{save_dir}/local_optium_model.pkl')
     for param_tensor in model.state_dict():
         print(param_tensor, "\t", model.state_dict()[param_tensor].size())
     torch.save(model.state_dict(), f'{save_dir}/final_model.pkl')
+
 

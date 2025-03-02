@@ -30,7 +30,7 @@ python test.py --exp-name 4 --data-path dataset/dataGNN4.mat --ckpt ckpt/4.pkl
 ### Training
 
 ```sh
-python train.py --data-path dataset/dataGNN4.mat
+python train.py --exp-name 4 --data-path dataset/dataGNN4.mat
 ```
 
 ### New Graph
